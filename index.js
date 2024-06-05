@@ -1,73 +1,65 @@
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs')
+const path = require('node:path')
 
-// All extensions included here: https://esbuild.github.io/content-types/#javascript
-const JS_EXTENSIONS = new Set(['js', 'cjs', 'mjs']);
-
-function pluginLodashImport(options = {}) {
-  const { filter = /.*/, outLodashPackage = 'lodash' } = options;
-
+function transformLodashPlugin(options = {}) {
+  const {
+    filter = /\.(js|cjs|mjs|ts|cts|mts|tsx)$/,
+    namespace,
+    outputLodashPackage = 'lodash',
+    appendJsExtension = true
+  } = options
   return {
     name: 'lodash',
     setup(build) {
-      build.onLoad({ filter }, async args => {
-        const contents = await fs.promises.readFile(args.path, 'utf8');
-        const extension = path.extname(args.path).replace('.', '');
-        const loader = JS_EXTENSIONS.has(extension) ? 'jsx' : extension;
+      build.onLoad({ filter, namespace }, async args => {
+        const contents = await fs.promises.readFile(args.path, 'utf8')
+        const extension = path.extname(args.path).replace('.', '')
+        const loader = ['mjs', 'cjs'].includes(extension)
+          ? 'js'
+          : ['mts', 'cts'].includes(extension)
+            ? 'ts'
+            : extension
 
-        const lodashImportRegex = /import\s+?(?:(?:(?:[\w*\s{},]*)\s+from\s+?)|)[\'\"](?:(?:lodash\/?.*?))[\'\"][\s]*?(?:;|$|)/g;
+        const lodashImportRegex =
+          /import\s+?(?:(?:(?:[\w*\s{},]*)\s+from\s+?)|)[\'\"](?:(?:lodash\/?.*?))[\'\"][\s]*?(?:;|$|)/g
 
-        const lodashImports = contents.match(lodashImportRegex);
-
+        const lodashImports = contents.match(lodashImportRegex)
         if (!lodashImports) {
-          return {
-            loader,
-            contents
-          };
+          return { loader, contents }
         }
 
-        const destructuredImportRegex = /\{\s?(((\w+),?\s?)+)\}/g;
-        let finalContents = contents;
+        const destructuredImportRegex = /\{\s?(((\w+),?\s?)+)\}/g
+        let finalContents = contents
 
         lodashImports.forEach(line => {
           // Capture content inside curly braces within imports
-          const destructuredImports = line.match(destructuredImportRegex);
-
           // For example:
-          // import noop from 'lodash/noop';
+          //   import noop from 'lodash/noop';
+          //   import { noop, isEmpty, debounce as _debounce } from 'lodash';
+          const destructuredImports = line.match(destructuredImportRegex)
           if (!destructuredImports) {
-            return;
+            return
           }
-
-          // For example:
-          // import { noop, isEmpty, debounce as _debounce } from 'lodash';
-          const importName = destructuredImports[0]
-            .replace(/[{}]/g, '')
-            .trim()
-            .split(', ');
-
-          let result = '';
-
+          const importName = destructuredImports[0].replace(/[{}]/g, '').trim().split(', ')
+          let result = ''
+          const ext = appendJsExtension ? '.js' : ''
           importName.forEach(name => {
-            const previousResult = `${result ? `${result}\n` : ''}`;
+            const previousResult = `${result ? `${result}\n` : ''}`
             if (name.includes(' as ')) {
-              const [realName, alias] = name.split(' as ');
-              result = `${previousResult}import ${alias} from '${outLodashPackage}/${realName}';`;
+              const [realName, alias] = name.split(' as ')
+              result = `${previousResult}import ${alias} from '${outputLodashPackage}/${realName}${ext}';`
             } else {
-              result = `${previousResult}import ${name} from '${outLodashPackage}/${name}';`;
+              result = `${previousResult}import ${name} from '${outputLodashPackage}/${name}${ext}';`
             }
-          });
+          })
 
-          finalContents = contents.replace(line, result);
-        });
+          finalContents = contents.replace(line, result)
+        })
 
-        return {
-          loader,
-          contents: finalContents
-        };
-      });
-    },
-  };
+        return { loader, contents: finalContents }
+      })
+    }
+  }
 }
 
-module.exports = pluginLodashImport;
+module.exports = { transformLodashPlugin }
