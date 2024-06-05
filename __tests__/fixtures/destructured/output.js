@@ -1,6 +1,6 @@
-import isEmpty from "lodash/isEmpty";
-import chunk from "lodash/chunk";
-import last from "lodash/last";
+import isEmpty from "lodash/isEmpty.js";
+import chunk from "lodash/chunk.js";
+import last from "lodash/last.js";
 const empty = {};
 const notEmpty = {
   a: 1
